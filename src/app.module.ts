@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
@@ -7,6 +7,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
 import { AuthModule } from './auth/auth.module.js';
+import { UsersModule } from './users/users.module.js';
 import { ProfileController } from './profile/profile.controller.js';
 import auth0Config from './config/auth0.config.js';
 
@@ -29,10 +30,18 @@ import auth0Config from './config/auth0.config.js';
     ]),
 
     // ── Database ─────────────────────────────────────────────────────────────
-    MongooseModule.forRoot(process.env.MONGODB_URI ?? 'mongodb://localhost:27017/nestjs-app'),
+    MongooseModule.forRootAsync({
+      imports: [ConfigModule],
+      useFactory: (configService: ConfigService) => ({
+        uri: configService.get<string>('MONGODB_URI') || 'mongodb://localhost:27017/nestjs-app',
+        serverSelectionTimeoutMS: 5000, // Fails fast in 5s if MongoDB isn't reachable yet
+      }),
+      inject: [ConfigService],
+    }),
 
-    // ── Auth ──────────────────────────────────────────────────────────────────
+    // ── Auth & Users ──────────────────────────────────────────────────────────
     AuthModule,
+    UsersModule,
   ],
   controllers: [AppController, ProfileController],
   providers: [

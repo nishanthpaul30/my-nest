@@ -1,22 +1,20 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
-import { PermissionsGuard } from '../auth/guards/permissions.guard.js';
+import { RolesGuard } from '../auth/guards/roles.guard.js';
 import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
-import { RequirePermissions } from '../auth/decorators/permissions.decorator.js';
+import { Roles } from '../auth/decorators/roles.decorator.js';
+import { Role } from '../users/enums/role.enum.js';
+import { UsersService } from '../users/users.service.js';
 import type { AuthenticatedUser } from '../auth/strategies/jwt.strategy.js';
 
-/**
- * ProfileController demonstrates how to protect routes using Auth0 JWT.
- *
- * All routes in this controller require a valid Auth0 access token.
- */
 @Controller('profile')
-@UseGuards(JwtAuthGuard) // Apply JWT guard to the entire controller
+@UseGuards(JwtAuthGuard)
 export class ProfileController {
+  constructor(private readonly usersService: UsersService) {}
+
   /**
-   * GET /profile
-   * Returns the authenticated user's basic info from the JWT payload.
-   * Only requires a valid token — no extra permissions needed.
+   * GET /api/v1/profile
+   * Returns authenticated user profile including roles loaded from MongoDB.
    */
   @Get()
   getProfile(@CurrentUser() user: AuthenticatedUser) {
@@ -27,17 +25,33 @@ export class ProfileController {
   }
 
   /**
-   * GET /profile/admin
-   * Requires the token to contain the 'read:admin' permission.
-   * Configure this permission in Auth0 Dashboard > APIs > Permissions.
+   * GET /api/v1/profile/admin
+   * Protected by RolesGuard: Requires the user to have Role.ADMIN in MongoDB.
    */
   @Get('admin')
-  @UseGuards(PermissionsGuard)
-  @RequirePermissions('read:admin')
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN)
   getAdminData(@CurrentUser() user: AuthenticatedUser) {
     return {
-      message: 'Admin access granted',
-      sub: user.sub,
+      message: 'Admin access granted from database role check!',
+      user,
+    };
+  }
+
+  /**
+   * POST /api/v1/profile/promote-admin
+   * Helper endpoint: Promotes current user to have [user, admin] roles in MongoDB.
+   */
+  @Post('promote-admin')
+  async promoteToAdmin(@CurrentUser() user: AuthenticatedUser) {
+    const updated = await this.usersService.updateRoles(user.sub, [
+      Role.USER,
+      Role.ADMIN,
+    ]);
+    return {
+      message: 'User successfully promoted to ADMIN in database!',
+      roles: updated.roles,
     };
   }
 }
+
